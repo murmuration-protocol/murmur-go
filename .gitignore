@@ -1,0 +1,71 @@
+# Go build and test artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+
+# Coverage and profiling
+coverage.out
+coverage.html
+*.prof
+
+# Go workspace files (local multi-repo development)
+go.work
+go.work.sum
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+.netrwhist
+Session.vim
+*.sublime-project
+*.sublime-workspace
+.zed/
+
+# AI assistant / tooling artifacts
+# Local AI assistant context and config that should not ship with the oracle.
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.cursor/
+.cursorrules
+.aider*
+.continue/
+.github/copilot-instructions.md
+.windsurfrules
+GEMINI.md
+.gemini/
+
+# OS cruft
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
+.Trash-*
+
+# Scratch / local working files
+/scratch/
+/drafts/
+/private/
+*.draft.md
+*.local.md
+TODO.local
+notes.local.md
