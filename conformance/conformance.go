@@ -15,6 +15,7 @@ import (
 	"github.com/murmuration-protocol/murmur-go/cbor"
 	"github.com/murmuration-protocol/murmur-go/contentid"
 	"github.com/murmuration-protocol/murmur-go/envelope"
+	"github.com/murmuration-protocol/murmur-go/schema"
 )
 
 // Vector is one self-describing fixture. The header fields come first; the
@@ -41,6 +42,9 @@ type Vector struct {
 	// reject
 	Bytes  string `json:"bytes"`
 	Reason string `json:"reason"`
+
+	// schema-reject
+	InterpretAs *int `json:"interpret_as"` // pointer so artifact-type code 0 is distinct from absent
 }
 
 // Load reads and parses one vector file.
@@ -85,6 +89,8 @@ func (v *Vector) Check() error {
 		return v.checkEnvelopeVerify()
 	case "reject":
 		return v.checkReject()
+	case "schema-reject":
+		return v.checkSchemaReject()
 	default:
 		return fmt.Errorf("unknown kind %q", v.Kind)
 	}
@@ -220,6 +226,44 @@ func (v *Vector) checkReject() error {
 	}
 	if string(de.Reason) != v.Reason {
 		return fmt.Errorf("reason mismatch: got %q, want %q", de.Reason, v.Reason)
+	}
+	return nil
+}
+
+// checkSchemaReject runs a schema-reject vector: canonical CBOR that decodes
+// clean but does not match the field table its type declares. The byte decoder
+// MUST accept it (a decode failure means the fixture belongs in reject/, so
+// that is a loud failure, not a pass), and interpretation against the table
+// MUST refuse it with the named artifact-determined reason.
+func (v *Vector) checkSchemaReject() error {
+	if v.InterpretAs == nil {
+		return fmt.Errorf("schema-reject vector missing `interpret_as`")
+	}
+	// The harness routes interpret_as 0 (the field-table type) through
+	// ParseFieldTable, the floor's own interpreter. The pinned schema-reject
+	// vectors all exercise the floor, so a different code has no table to route
+	// to yet and is a fixture error.
+	if *v.InterpretAs != int(schema.ArtifactFieldTable) {
+		return fmt.Errorf("interpret_as %d is not yet routable; only the field-table type (0) is pinned", *v.InterpretAs)
+	}
+	b, err := hex.DecodeString(v.Cbor)
+	if err != nil {
+		return fmt.Errorf("bad cbor hex: %w", err)
+	}
+	decoded, err := cbor.Decode(b)
+	if err != nil {
+		return fmt.Errorf("schema-reject bytes must decode (a byte refusal belongs in reject/): %w", err)
+	}
+	_, err = schema.ParseFieldTable(decoded, schema.DefaultRegistry())
+	if err == nil {
+		return fmt.Errorf("expected interpretation to refuse (%s), but it succeeded", v.Reason)
+	}
+	se, ok := err.(*schema.Error)
+	if !ok {
+		return fmt.Errorf("expected a *schema.Error, got %T: %v", err, err)
+	}
+	if string(se.Reason) != v.Reason {
+		return fmt.Errorf("reason mismatch: got %q, want %q", se.Reason, v.Reason)
 	}
 	return nil
 }
