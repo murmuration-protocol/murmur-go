@@ -14,7 +14,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/cbor"
 )
 
 // ErrNonCanonicalClaims is returned when the claims bytes are not canonical

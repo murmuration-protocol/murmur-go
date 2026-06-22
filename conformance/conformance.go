@@ -12,10 +12,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
-	"github.com/murmuration-protocol/murmur-go/contentid"
-	"github.com/murmuration-protocol/murmur-go/envelope"
-	"github.com/murmuration-protocol/murmur-go/schema"
+	"github.com/murmur-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/contentid"
+	"github.com/murmur-protocol/murmur-go/envelope"
+	"github.com/murmur-protocol/murmur-go/schema"
 )
 
 // Vector is one self-describing fixture. The header fields come first; the

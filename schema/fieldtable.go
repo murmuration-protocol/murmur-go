@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/cbor"
 )
 
 // ParseFieldTable interprets a field-table artifact, the canonical CBOR a table

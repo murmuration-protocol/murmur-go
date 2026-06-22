@@ -26,7 +26,7 @@ jobs:
       - name: Check out spec (conformance vectors)
         uses: actions/checkout@v7.0.0
         with:
-          repository: murmuration-protocol/spec
+          repository: murmur-protocol/spec
           path: spec
 
       - name: Set up Go

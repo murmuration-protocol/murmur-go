@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/cbor"
 )
 
 func mustHex(t *testing.T, s string) []byte {

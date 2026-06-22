@@ -1,4 +1,4 @@
-module github.com/murmuration-protocol/murmur-go
+module github.com/murmur-protocol/murmur-go
 
 go 1.26
 

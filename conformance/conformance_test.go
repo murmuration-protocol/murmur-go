@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/murmuration-protocol/murmur-go/conformance"
+	"github.com/murmur-protocol/murmur-go/conformance"
 )
 
 // vectorsDir resolves the conformance-vector corpus. It honours MURMUR_VECTORS

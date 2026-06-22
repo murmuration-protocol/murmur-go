@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
-	"github.com/murmuration-protocol/murmur-go/schema"
+	"github.com/murmur-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/schema"
 )
 
 // genVectors guards the schema-reject vector generator. It writes real,

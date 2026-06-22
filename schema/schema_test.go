@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
-	"github.com/murmuration-protocol/murmur-go/schema"
+	"github.com/murmur-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/schema"
 )
 
 // The pinned closure artifacts, the canonical CBOR of the three floor tables.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/cbor"
 )
 
 // Reason names why interpretation or a presence check failed. It is the schema

@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/murmuration-protocol/murmur-go/cbor"
+	"github.com/murmur-protocol/murmur-go/cbor"
 )
 
 // parseValue turns the tagged-JSON `value` of a vector into a cbor.Value.
