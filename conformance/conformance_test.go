@@ -1,10 +1,12 @@
-package conformance
+package conformance_test
 
 import (
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/murmuration-protocol/murmur-go/conformance"
 )
 
 // vectorsDir resolves the conformance-vector corpus. It honours MURMUR_VECTORS
@@ -27,7 +29,7 @@ func TestVectors(t *testing.T) {
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("vectors not found at %s (set MURMUR_VECTORS): %v", dir, err)
 	}
-	files, err := Files(dir)
+	files, err := conformance.Files(dir)
 	if err != nil {
 		t.Fatalf("globbing vectors: %v", err)
 	}
@@ -37,7 +39,7 @@ func TestVectors(t *testing.T) {
 	for _, path := range files {
 		rel, _ := filepath.Rel(dir, path)
 		t.Run(rel, func(t *testing.T) {
-			v, err := Load(path)
+			v, err := conformance.Load(path)
 			if err != nil {
 				t.Fatalf("loading: %v", err)
 			}
