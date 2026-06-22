@@ -29,11 +29,12 @@ The one exception is `golang.org/x/text/unicode/norm`, used to enforce that text
 
 ## Status
 
-v1. The oracle runs the full conformance corpus: canonical CBOR encode and decode with rejection of non-canonical forms, SHA-256 content-addressing (including the meta-table closure fixed point), and the Ed25519 signing primitive over canonical claims.
+v1. The oracle runs the full conformance corpus: canonical CBOR encode and decode with rejection of non-canonical forms, SHA-256 content-addressing (including the meta-table closure fixed point), and the Ed25519 signing primitive over canonical claims. The `schema` interpretation layer sits above the codec, and the floor closure proves itself a fixed point in Go: each floor table parsed from its canonical artifact reproduces the hardcoded grammar.
 
 Deferred until their spec field tables or their counterpart implementation land:
 
 - Full-envelope and identifier verify, which wait on the envelope-header and identifier field tables.
+- The protocol artifact tables (envelope, grant, capability definition, and the rest), loaded with `ParseFieldTable` once the spec pins them, and the schema-level reject vectors that will pin the interpreter's refusal reasons.
 - The cross-test against `murmur-rs` (rust signs, go verifies, and the reverse), which waits on `murmur-rs`.
 
 ## Layout
@@ -41,6 +42,7 @@ Deferred until their spec field tables or their counterpart implementation land:
 - `cbor` is the owned canonical CBOR codec: the value model, encode, decode, and canonical enforcement. It is reused by the later authoring compiler, so it carries no oracle-specific coupling.
 - `contentid` is SHA-256 over canonical bytes.
 - `envelope` is the Ed25519 verify of the signing primitive, with a canonicality gate ahead of the signature check.
+- `schema` is the interpretation layer above `cbor`: it applies a field table to a structural value, binding integer wire keys to named typed fields, resolving `ref` fields by artifact-type code, and reading a two-element integer array as a decimal or rational where the schema says so. It follows the spec's "decode, then validate" split, so it does not enforce presence; an actor gates the fields its own action needs with `Instance.Require`. The floor closure (field-table, entry, type-descriptor) is held as the grammar a node is born knowing, and `ParseFieldTable` loads any other table from its canonical artifact.
 - `conformance` is the vector types, the tagged-JSON value parser, and the runner; `conformance_test.go` runs the corpus.
 
 ## Build and test
