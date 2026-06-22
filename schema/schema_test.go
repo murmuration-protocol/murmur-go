@@ -275,6 +275,131 @@ func TestParseFieldTableRejectsMalformedTypeDescriptor(t *testing.T) {
 	assertReason(t, err, schema.ReasonMalformedDescriptor)
 }
 
+// TestParseFieldTableRejectsEmptyEntries exercises malformed-field-table: a
+// field table with no entries at all. Its keys are vacuously dense, so only the
+// at-least-one-entry rule catches it.
+func TestParseFieldTableRejectsEmptyEntries(t *testing.T) {
+	ft := ftArtifact(int(schema.PrivateRangeStart), 1) // no entries
+	_, err := schema.ParseFieldTable(ft, schema.DefaultRegistry())
+	assertReason(t, err, schema.ReasonMalformedFieldTable)
+}
+
+// TestParseFieldTableRejectsMissingTableFields exercises malformed-field-table
+// for the floor-presence case: a field table missing a field the meta-table
+// requires is malformed, not action-missing, because the floor is read whole
+// (the degenerate-case law). The reason is malformed-field-table, never the
+// missing-required-field reserved for action-relative protocol artifacts.
+func TestParseFieldTableRejectsMissingTableFields(t *testing.T) {
+	td := scalarTD(int(schema.KindInt))
+	entry := entryArtifact(0, "a", td, int(schema.PresenceRequired))
+	full := func() (d, v cbor.Value, e cbor.Value) {
+		return cbor.NewInt(int64(schema.PrivateRangeStart)), cbor.NewInt(1), cbor.Array{Items: []cbor.Value{entry}}
+	}
+	cases := []struct {
+		name string
+		drop int // wire key to omit
+	}{
+		{"missing describes", 0},
+		{"missing version", 1},
+		{"missing entries", 2},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d, v, e := full()
+			m := cbor.Map{}
+			if c.drop != 0 {
+				m.Entries = append(m.Entries, cbor.MapEntry{Key: cbor.NewInt(0), Value: d})
+			}
+			if c.drop != 1 {
+				m.Entries = append(m.Entries, cbor.MapEntry{Key: cbor.NewInt(1), Value: v})
+			}
+			if c.drop != 2 {
+				m.Entries = append(m.Entries, cbor.MapEntry{Key: cbor.NewInt(2), Value: e})
+			}
+			_, err := schema.ParseFieldTable(m, schema.DefaultRegistry())
+			assertReason(t, err, schema.ReasonMalformedFieldTable)
+		})
+	}
+}
+
+// TestParseFieldTableRejectsMalformedEntry exercises malformed-entry: an entry
+// missing one of key, name, type, presence. The entry decodes and type-checks,
+// but no field table can be built from it, and the absence is malformedness on
+// the floor, not an action-relative missing field.
+func TestParseFieldTableRejectsMalformedEntry(t *testing.T) {
+	td := scalarTD(int(schema.KindInt))
+	cases := []struct {
+		name string
+		drop int
+	}{
+		{"missing key", 0},
+		{"missing name", 1},
+		{"missing type", 2},
+		{"missing presence", 3},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			entry := cbor.Map{}
+			if c.drop != 0 {
+				entry.Entries = append(entry.Entries, cbor.MapEntry{Key: cbor.NewInt(0), Value: cbor.NewInt(0)})
+			}
+			if c.drop != 1 {
+				entry.Entries = append(entry.Entries, cbor.MapEntry{Key: cbor.NewInt(1), Value: cbor.Text{V: "a"}})
+			}
+			if c.drop != 2 {
+				entry.Entries = append(entry.Entries, cbor.MapEntry{Key: cbor.NewInt(2), Value: td})
+			}
+			if c.drop != 3 {
+				entry.Entries = append(entry.Entries, cbor.MapEntry{Key: cbor.NewInt(3), Value: cbor.NewInt(1)})
+			}
+			ft := ftArtifact(int(schema.PrivateRangeStart), 1, entry)
+			_, err := schema.ParseFieldTable(ft, schema.DefaultRegistry())
+			assertReason(t, err, schema.ReasonMalformedEntry)
+		})
+	}
+}
+
+// TestParseFieldTableRejectsMissingKind exercises malformed-type-descriptor for
+// the floor-presence case: a type-descriptor with no kind.
+func TestParseFieldTableRejectsMissingKind(t *testing.T) {
+	emptyTD := intMap() // no kind
+	ft := ftArtifact(int(schema.PrivateRangeStart), 1,
+		entryArtifact(0, "a", emptyTD, int(schema.PresenceRequired)),
+	)
+	_, err := schema.ParseFieldTable(ft, schema.DefaultRegistry())
+	assertReason(t, err, schema.ReasonMalformedDescriptor)
+}
+
+// TestParseFieldTableRejectsCommission exercises the commission half of
+// malformed-type-descriptor: a kind carrying a field another kind owns. A
+// scalar with of, ref, or unit, or an array with a unit, is malformed even
+// though every field decodes and type-checks.
+func TestParseFieldTableRejectsCommission(t *testing.T) {
+	td := func(pairs ...struct {
+		k int
+		v cbor.Value
+	}) cbor.Map {
+		return intMap(pairs...)
+	}
+	cases := []struct {
+		name string
+		td   cbor.Map
+	}{
+		{"int carrying of", td(kv(0, cbor.NewInt(int64(schema.KindInt))), kv(1, scalarTD(int(schema.KindInt))))},
+		{"int carrying unit", td(kv(0, cbor.NewInt(int64(schema.KindInt))), kv(3, cbor.NewInt(1)))},
+		{"array carrying unit", td(kv(0, cbor.NewInt(int64(schema.KindArray))), kv(1, scalarTD(int(schema.KindInt))), kv(3, cbor.NewInt(1)))},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ft := ftArtifact(int(schema.PrivateRangeStart), 1,
+				entryArtifact(0, "a", c.td, int(schema.PresenceRequired)),
+			)
+			_, err := schema.ParseFieldTable(ft, schema.DefaultRegistry())
+			assertReason(t, err, schema.ReasonMalformedDescriptor)
+		})
+	}
+}
+
 // TestUnknownKindIsResolutionFamily confirms an unknown type-kind is the
 // resolution family, not a malformed reason: a newer node may define the kind.
 func TestUnknownKindIsResolutionFamily(t *testing.T) {

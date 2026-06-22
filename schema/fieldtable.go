@@ -22,8 +22,19 @@ func ParseFieldTable(v cbor.Value, reg *Registry) (FieldTable, error) {
 	if err != nil {
 		return FieldTable{}, err
 	}
-	if err := in.Require(0, 1, 2); err != nil {
-		return FieldTable{}, err
+	// On the floor presence is not action-relative: a field table is read whole,
+	// so a meta-table-required field absent from it is malformed, not
+	// action-missing (the degenerate-case law). This is why the presence gate
+	// here is malformed-field-table, not the missing-required-field that
+	// in.Require yields for an action's own key set.
+	for _, k := range []int{0, 1, 2} {
+		if !in.Has(k) {
+			name, _ := MetaTable.entryByKey(k)
+			return FieldTable{}, &Error{
+				Reason: ReasonMalformedFieldTable,
+				Msg:    fmt.Sprintf("field %q (key %d) the meta-table requires is absent", name.Name, k),
+			}
+		}
 	}
 	describes, _ := in.Int(0)
 	version, _ := in.Int(1)
@@ -62,6 +73,13 @@ func ParseFieldTable(v cbor.Value, reg *Registry) (FieldTable, error) {
 // only this check does. A gap, an out-of-order key, and a duplicate all surface
 // here as a key that is not its own position.
 func validateEntryKeys(entries []Entry) error {
+	if len(entries) == 0 {
+		return &Error{
+			Reason: ReasonMalformedFieldTable,
+			Path:   "entries",
+			Msg:    "a field table carries at least one entry",
+		}
+	}
 	for i, e := range entries {
 		if e.Key != i {
 			return &Error{
@@ -75,8 +93,20 @@ func validateEntryKeys(entries []Entry) error {
 }
 
 func parseEntry(ei *Instance, idx int) (Entry, error) {
-	if err := ei.Require(0, 1, 2, 3); err != nil {
-		return Entry{}, err
+	// The entry decodes cleanly and type-checks against the entry table, but no
+	// field table can be built from an entry lacking key, name, type, or
+	// presence, and no generic reason names the absence. On the floor this is
+	// malformedness, not an action-relative missing field (the degenerate-case
+	// law), so it is malformed-entry rather than missing-required-field.
+	for _, k := range []int{0, 1, 2, 3} {
+		if !ei.Has(k) {
+			name, _ := EntryTable.entryByKey(k)
+			return Entry{}, &Error{
+				Reason: ReasonMalformedEntry,
+				Path:   fmt.Sprintf("entries[%d].%s", idx, name.Name),
+				Msg:    fmt.Sprintf("entry is missing %q (key %d)", name.Name, k),
+			}
+		}
 	}
 	keyN, _ := ei.Int(0)
 	name, _ := ei.Text(1)
@@ -102,8 +132,10 @@ func parseEntry(ei *Instance, idx int) (Entry, error) {
 }
 
 func parseTypeDescriptor(ti *Instance) (TypeDescriptor, error) {
-	if err := ti.Require(0); err != nil {
-		return TypeDescriptor{}, err
+	if !ti.Has(0) {
+		// A type-descriptor with no kind is malformed on the floor, not an
+		// action-relative missing field (the degenerate-case law).
+		return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: "type-descriptor is missing its kind"}
 	}
 	kindN, _ := ti.Int(0)
 	kindCode, err := toInt(kindN, "kind")
@@ -140,23 +172,47 @@ func parseTypeDescriptor(ti *Instance) (TypeDescriptor, error) {
 		td.Unit = unit
 	}
 
-	// A type-descriptor MUST carry what its kind requires; this conditional
+	// A type-descriptor's fields must match its kind: a kind both requires its
+	// own field and forbids the others'. of belongs to array, ref to ref, unit
+	// to decimal and rational; a scalar owns none of the three. This conditional
 	// completeness is a floor shape rule the flat meta-table cannot state, so it
 	// is checked here rather than at the byte or per-field layer. Presence, not
 	// a non-zero value, is the test: ref code 0 and unit code 0 are both valid.
+	hasOf, hasRef, hasUnit := ti.Has(1), ti.Has(2), ti.Has(3)
+	malformed := func(msg string) (TypeDescriptor, error) {
+		return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: msg}
+	}
 	switch td.Kind {
+	case KindInt, KindBytes, KindText, KindBool:
+		if hasOf || hasRef || hasUnit {
+			return malformed("a scalar kind carries no of, ref, or unit")
+		}
 	case KindArray:
-		if td.Of == nil {
-			return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: "array kind requires an element type (of)"}
+		if !hasOf {
+			return malformed("array kind requires an element type (of)")
+		}
+		if hasRef || hasUnit {
+			return malformed("array kind carries no ref or unit")
 		}
 	case KindRef:
-		if !ti.Has(2) {
-			return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: "ref kind requires a ref code"}
+		if !hasRef {
+			return malformed("ref kind requires a ref code")
+		}
+		if hasOf || hasUnit {
+			return malformed("ref kind carries no of or unit")
 		}
 	case KindDecimal, KindRational:
-		if !ti.Has(3) {
-			return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: "magnitude kind requires a unit code"}
+		if !hasUnit {
+			return malformed("magnitude kind requires a unit code")
 		}
+		if hasOf || hasRef {
+			return malformed("magnitude kind carries no of or ref")
+		}
+	default:
+		// An unknown kind is the resolution family, not malformed: a newer node
+		// may define the kind and the fields it owns, so its commission cannot
+		// be judged here. The resolution refusal is raised where the kind is
+		// used to interpret a value (interpretValue), not where it is parsed.
 	}
 	return td, nil
 }

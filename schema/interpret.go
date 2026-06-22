@@ -22,11 +22,15 @@ type Reason string
 // interpreters reach the same reason and a schema vector can pin it.
 // non-canonical-decimal and non-canonical-rational carry the content-addressing
 // weight: a magnitude with a second accepted form forks its address, the byte
-// subset's argument one layer up. The two malformed-* reasons share this class:
-// each names a floor artifact that decodes cleanly and matches the meta-table
-// field by field, yet breaks a structural rule of its floor type the flat
-// field-table model cannot state. They are reserved for exactly those rules; an
-// unresolvable code or enum value is the resolution family below, not malformed.
+// subset's argument one layer up. The three malformed-* reasons share this
+// class: each names a floor artifact that decodes cleanly and matches the
+// meta-table field by field, yet breaks a structural rule of its floor type the
+// flat field-table model cannot state. On the floor presence collapses into
+// malformedness (the degenerate-case law): a floor artifact missing a field the
+// meta-table requires is malformed-*, not missing-required-field, which is
+// reserved for the protocol artifacts whose presence is action-relative. They
+// are reserved for exactly those rules; an unresolvable code or enum value is
+// the resolution family below, not malformed.
 const (
 	ReasonUnknownField Reason = "unknown-field-key" // a wire key the version-closed table does not define
 	// bad-field-key is distinct from cbor.ReasonBadMapKeyType: a wholly
@@ -37,8 +41,9 @@ const (
 	ReasonBadMagnitude         Reason = "bad-magnitude"             // a decimal or rational field whose value is not a two-integer array
 	ReasonNonCanonicalDecimal  Reason = "non-canonical-decimal"     // a decimal value outside its canonical form
 	ReasonNonCanonicalRational Reason = "non-canonical-rational"    // a rational value outside its canonical form
-	ReasonMalformedDescriptor  Reason = "malformed-type-descriptor" // a type-descriptor omitting what its kind requires (array without of, ref without ref, magnitude without unit)
-	ReasonMalformedFieldTable  Reason = "malformed-field-table"     // entry keys that are not a dense, ascending, duplicate-free sequence
+	ReasonMalformedDescriptor  Reason = "malformed-type-descriptor" // a type-descriptor whose fields do not match its kind (a required field absent, or a field another kind owns present)
+	ReasonMalformedFieldTable  Reason = "malformed-field-table"     // a field table whose entry keys are not a dense, ascending, duplicate-free sequence, that carries no entries, or that is missing a meta-table-required field
+	ReasonMalformedEntry       Reason = "malformed-entry"           // a field-table entry missing a field the meta-table requires (key, name, type, presence)
 )
 
 // Capability-relative reasons depend on which tables and vocabularies this
