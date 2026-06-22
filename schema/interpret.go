@@ -22,7 +22,11 @@ type Reason string
 // interpreters reach the same reason and a schema vector can pin it.
 // non-canonical-decimal and non-canonical-rational carry the content-addressing
 // weight: a magnitude with a second accepted form forks its address, the byte
-// subset's argument one layer up.
+// subset's argument one layer up. The two malformed-* reasons share this class:
+// each names a floor artifact that decodes cleanly and matches the meta-table
+// field by field, yet breaks a structural rule of its floor type the flat
+// field-table model cannot state. They are reserved for exactly those rules; an
+// unresolvable code or enum value is the resolution family below, not malformed.
 const (
 	ReasonUnknownField Reason = "unknown-field-key" // a wire key the version-closed table does not define
 	// bad-field-key is distinct from cbor.ReasonBadMapKeyType: a wholly
@@ -33,14 +37,19 @@ const (
 	ReasonBadMagnitude         Reason = "bad-magnitude"             // a decimal or rational field whose value is not a two-integer array
 	ReasonNonCanonicalDecimal  Reason = "non-canonical-decimal"     // a decimal value outside its canonical form
 	ReasonNonCanonicalRational Reason = "non-canonical-rational"    // a rational value outside its canonical form
-	ReasonMalformedDescriptor  Reason = "malformed-type-descriptor" // a type-descriptor missing what its kind needs
+	ReasonMalformedDescriptor  Reason = "malformed-type-descriptor" // a type-descriptor omitting what its kind requires (array without of, ref without ref, magnitude without unit)
+	ReasonMalformedFieldTable  Reason = "malformed-field-table"     // entry keys that are not a dense, ascending, duplicate-free sequence
 )
 
-// Capability-relative reasons depend on which tables this interpreter ships,
-// not on the artifact alone, so two conformant nodes with different table sets
-// may disagree. Not pinned for cross-implementation reason-equality.
+// Capability-relative reasons depend on which tables and vocabularies this
+// interpreter ships, not on the artifact alone, so two conformant nodes may
+// disagree. Not pinned for cross-implementation reason-equality. This is the
+// resolution family: besides an unresolved ref, it covers a code or enum value
+// a floor field cannot resolve, an unknown type-kind, a presence or unit code
+// outside the version's enum, an out-of-range code, since a newer node may know
+// a value an older one does not.
 const (
-	ReasonUnresolvedRef Reason = "unresolved-ref" // a ref to an artifact type the registry does not hold at the artifact's version
+	ReasonUnresolvedRef Reason = "unresolved-ref" // a ref, or other code/enum value, the interpreter cannot resolve at the artifact's version
 )
 
 // Action-relative reasons depend on the action and role of the acting party,
@@ -189,7 +198,10 @@ func interpretValue(td TypeDescriptor, v cbor.Value, reg *Registry, version int,
 		}
 		return interpretMap(child, v, reg, version, path)
 	default:
-		return nil, &Error{Reason: ReasonMalformedDescriptor, Path: path, Msg: fmt.Sprintf("unknown kind %d", td.Kind)}
+		// An unknown type-kind is a value the node cannot resolve, not a
+		// structural malformation: the resolution family, since a newer node
+		// may define the kind.
+		return nil, &Error{Reason: ReasonUnresolvedRef, Path: path, Msg: fmt.Sprintf("unknown type-kind code %d", td.Kind)}
 	}
 }
 

@@ -215,3 +215,75 @@ func assertReason(t *testing.T, err error, want schema.Reason) {
 		t.Errorf("got reason %q, want %q", se.Reason, want)
 	}
 }
+
+// Builders for field-table artifacts, used by the malformed-floor tests. They
+// produce the same shapes ParseFieldTable interprets: a field-table map, an
+// entry map, and a scalar type-descriptor map.
+
+func scalarTD(kind int) cbor.Map { return intMap(kv(0, cbor.NewInt(int64(kind)))) }
+
+func entryArtifact(key int, name string, td cbor.Value, presence int) cbor.Map {
+	return intMap(
+		kv(0, cbor.NewInt(int64(key))),
+		kv(1, cbor.Text{V: name}),
+		kv(2, td),
+		kv(3, cbor.NewInt(int64(presence))),
+	)
+}
+
+func ftArtifact(describes, version int, entries ...cbor.Value) cbor.Map {
+	return intMap(
+		kv(0, cbor.NewInt(int64(describes))),
+		kv(1, cbor.NewInt(int64(version))),
+		kv(2, cbor.Array{Items: entries}),
+	)
+}
+
+// TestParseFieldTableRejectsNonDenseKeys exercises malformed-field-table: a key
+// sequence with a gap is not the dense, ascending sequence a table requires,
+// though each entry decodes and type-checks cleanly against the entry table.
+func TestParseFieldTableRejectsNonDenseKeys(t *testing.T) {
+	td := scalarTD(int(schema.KindInt))
+	ft := ftArtifact(int(schema.PrivateRangeStart), 1,
+		entryArtifact(0, "a", td, int(schema.PresenceRequired)),
+		entryArtifact(2, "b", td, int(schema.PresenceRequired)), // gap: 0 then 2
+	)
+	_, err := schema.ParseFieldTable(ft, schema.DefaultRegistry())
+	assertReason(t, err, schema.ReasonMalformedFieldTable)
+}
+
+func TestParseFieldTableRejectsDuplicateKeys(t *testing.T) {
+	td := scalarTD(int(schema.KindInt))
+	ft := ftArtifact(int(schema.PrivateRangeStart), 1,
+		entryArtifact(0, "a", td, int(schema.PresenceRequired)),
+		entryArtifact(0, "b", td, int(schema.PresenceRequired)), // key 0 twice
+	)
+	_, err := schema.ParseFieldTable(ft, schema.DefaultRegistry())
+	assertReason(t, err, schema.ReasonMalformedFieldTable)
+}
+
+// TestParseFieldTableRejectsMalformedTypeDescriptor exercises
+// malformed-type-descriptor: an array kind that omits its element type. The
+// descriptor decodes and matches the type-descriptor table field by field; only
+// its conditional-by-kind rule catches it.
+func TestParseFieldTableRejectsMalformedTypeDescriptor(t *testing.T) {
+	arrayNoOf := scalarTD(int(schema.KindArray)) // kind = array, no `of`
+	ft := ftArtifact(int(schema.PrivateRangeStart), 1,
+		entryArtifact(0, "a", arrayNoOf, int(schema.PresenceRequired)),
+	)
+	_, err := schema.ParseFieldTable(ft, schema.DefaultRegistry())
+	assertReason(t, err, schema.ReasonMalformedDescriptor)
+}
+
+// TestUnknownKindIsResolutionFamily confirms an unknown type-kind is the
+// resolution family, not a malformed reason: a newer node may define the kind.
+func TestUnknownKindIsResolutionFamily(t *testing.T) {
+	tbl := schema.FieldTable{
+		Describes: schema.PrivateRangeStart,
+		Version:   1,
+		Entries:   []schema.Entry{{Key: 0, Name: "x", Type: schema.TypeDescriptor{Kind: schema.Kind(99)}, Presence: schema.PresenceRequired}},
+	}
+	v := intMap(kv(0, cbor.NewInt(1)))
+	_, err := schema.Interpret(tbl, v, schema.DefaultRegistry())
+	assertReason(t, err, schema.ReasonUnresolvedRef)
+}

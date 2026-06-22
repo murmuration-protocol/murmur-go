@@ -49,7 +49,29 @@ func ParseFieldTable(v cbor.Value, reg *Registry) (FieldTable, error) {
 		}
 		entries = append(entries, ent)
 	}
+	if err := validateEntryKeys(entries); err != nil {
+		return FieldTable{}, err
+	}
 	return FieldTable{Describes: ArtifactType(dCode), Version: ver, Entries: entries}, nil
+}
+
+// validateEntryKeys enforces the dense, ascending, duplicate-free key sequence a
+// field table requires: the entries' keys must be 0, 1, ..., n-1 in order. This
+// is a field-table shape rule the meta-table's flat field types cannot state, so
+// neither the byte decoder nor the per-field type check catches a violation, and
+// only this check does. A gap, an out-of-order key, and a duplicate all surface
+// here as a key that is not its own position.
+func validateEntryKeys(entries []Entry) error {
+	for i, e := range entries {
+		if e.Key != i {
+			return &Error{
+				Reason: ReasonMalformedFieldTable,
+				Path:   fmt.Sprintf("entries[%d]", i),
+				Msg:    fmt.Sprintf("entry key %d breaks the dense ascending sequence (expected %d)", e.Key, i),
+			}
+		}
+	}
+	return nil
 }
 
 func parseEntry(ei *Instance, idx int) (Entry, error) {
@@ -117,19 +139,40 @@ func parseTypeDescriptor(ti *Instance) (TypeDescriptor, error) {
 		}
 		td.Unit = unit
 	}
+
+	// A type-descriptor MUST carry what its kind requires; this conditional
+	// completeness is a floor shape rule the flat meta-table cannot state, so it
+	// is checked here rather than at the byte or per-field layer. Presence, not
+	// a non-zero value, is the test: ref code 0 and unit code 0 are both valid.
+	switch td.Kind {
+	case KindArray:
+		if td.Of == nil {
+			return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: "array kind requires an element type (of)"}
+		}
+	case KindRef:
+		if !ti.Has(2) {
+			return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: "ref kind requires a ref code"}
+		}
+	case KindDecimal, KindRational:
+		if !ti.Has(3) {
+			return TypeDescriptor{}, &Error{Reason: ReasonMalformedDescriptor, Path: "type-descriptor", Msg: "magnitude kind requires a unit code"}
+		}
+	}
 	return td, nil
 }
 
 // toInt narrows a wire integer to a native int for a code or key, refusing one
-// that does not fit. Codes and keys are small by construction; an out-of-range
-// value is malformed, not merely large.
+// that does not fit. Codes and keys are small by construction. An out-of-range
+// value is a code the node cannot resolve, not a structural malformation, so it
+// is the resolution family (unresolved-ref), per the spec's "an integer a floor
+// field cannot resolve".
 func toInt(n *big.Int, what string) (int, error) {
 	if n == nil || !n.IsInt64() {
-		return 0, &Error{Reason: ReasonMalformedDescriptor, Msg: fmt.Sprintf("%s is out of range", what)}
+		return 0, &Error{Reason: ReasonUnresolvedRef, Msg: fmt.Sprintf("%s is out of range", what)}
 	}
 	v := n.Int64()
 	if int64(int(v)) != v {
-		return 0, &Error{Reason: ReasonMalformedDescriptor, Msg: fmt.Sprintf("%s is out of range", what)}
+		return 0, &Error{Reason: ReasonUnresolvedRef, Msg: fmt.Sprintf("%s is out of range", what)}
 	}
 	return int(v), nil
 }
