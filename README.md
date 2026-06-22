@@ -18,7 +18,9 @@ Out of scope, and staying that way: Zenoh, MIDI, discovery, the daemon, the brid
 
 ## Dependencies
 
-Standard library only. Ed25519 comes from `crypto/ed25519` and SHA-256 from `crypto/sha256`. The canonical CBOR codec is a small owned module, not a third-party dependency. That keeps the oracle an independent witness rather than a wrapper around someone else's encoder.
+Standard library, with one sanctioned exception. Ed25519 comes from `crypto/ed25519` and SHA-256 from `crypto/sha256`. The canonical CBOR codec is a small owned module, not a third-party dependency. That keeps the oracle an independent witness rather than a wrapper around someone else's encoder.
+
+The one exception is `golang.org/x/text/unicode/norm`, used to enforce that text strings are in Normalization Form C. NFC needs the Unicode tables, the module is Go-team owned in the `golang.org/x` extended-standard-library namespace, and shipping our own normalization tables would be the larger risk. Any dependency beyond that is treated as a design error.
 
 ## Relationship to the other repos
 
@@ -27,7 +29,19 @@ Standard library only. Ed25519 comes from `crypto/ed25519` and SHA-256 from `cry
 
 ## Status
 
-Scaffold. The vector runner lands once the spec ships the first canonical-encoding vectors (Section 6.3). Until then this repo carries the module layout, the licence, and the contribution hygiene.
+v1. The oracle runs the full conformance corpus: canonical CBOR encode and decode with rejection of non-canonical forms, SHA-256 content-addressing (including the meta-table closure fixed point), and the Ed25519 signing primitive over canonical claims.
+
+Deferred until their spec field tables or their counterpart implementation land:
+
+- Full-envelope and identifier verify, which wait on the envelope-header and identifier field tables.
+- The cross-test against `murmur-rs` (rust signs, go verifies, and the reverse), which waits on `murmur-rs`.
+
+## Layout
+
+- `cbor` is the owned canonical CBOR codec: the value model, encode, decode, and canonical enforcement. It is reused by the later authoring compiler, so it carries no oracle-specific coupling.
+- `contentid` is SHA-256 over canonical bytes.
+- `envelope` is the Ed25519 verify of the signing primitive, with a canonicality gate ahead of the signature check.
+- `conformance` is the vector types, the tagged-JSON value parser, and the runner; `conformance_test.go` runs the corpus.
 
 ## Build and test
 
@@ -36,7 +50,7 @@ go vet ./...
 go test ./...
 ```
 
-The module targets the Go 1.26 series.
+The vectors live in the sibling `spec` repo. `go test` defaults to `../../spec/vectors`, relative to the `conformance` package, and honours `MURMUR_VECTORS` to point elsewhere (CI checks out `spec` separately and sets it). The module targets the Go 1.26 series.
 
 ## Licence
 

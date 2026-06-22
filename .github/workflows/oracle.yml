@@ -1,0 +1,45 @@
+name: oracle
+
+# The oracle runs the shared conformance vectors, which live in the sibling
+# spec repo, not here. CI checks out both: murmur-go for the code, spec for the
+# vectors, and points MURMUR_VECTORS at the spec checkout. The cross-test
+# against murmur-rs (rust signs, go verifies, and the reverse) joins this matrix
+# once murmur-rs exists.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out murmur-go
+        uses: actions/checkout@v7.0.0
+        with:
+          path: murmur-go
+
+      - name: Check out spec (conformance vectors)
+        uses: actions/checkout@v7.0.0
+        with:
+          repository: murmuration-protocol/spec
+          path: spec
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version-file: murmur-go/go.mod
+
+      - name: go vet
+        working-directory: murmur-go
+        run: go vet ./...
+
+      - name: go test
+        working-directory: murmur-go
+        env:
+          MURMUR_VECTORS: ${{ github.workspace }}/spec/vectors
+        run: go test ./...
