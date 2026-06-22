@@ -124,32 +124,15 @@ func (e *encoder) integer(n *big.Int) error {
 }
 
 func (e *encoder) decimal(d Decimal, depth int) error {
-	if d.Scale == nil || d.Mantissa == nil {
-		return &EncodeError{Msg: "decimal has a nil component"}
-	}
-	if d.Mantissa.Sign() == 0 {
-		if d.Scale.Sign() != 0 {
-			return &EncodeError{Msg: "canonical zero decimal is [0, 0]"}
-		}
-	} else if new(big.Int).Mod(d.Mantissa, bigTen).Sign() == 0 {
-		return &EncodeError{Msg: "decimal mantissa must not be divisible by ten"}
+	if err := CheckDecimal(d.Scale, d.Mantissa); err != nil {
+		return err
 	}
 	return e.intPair(d.Scale, d.Mantissa, depth)
 }
 
 func (e *encoder) rational(r Rational, depth int) error {
-	if r.Num == nil || r.Den == nil {
-		return &EncodeError{Msg: "rational has a nil component"}
-	}
-	if r.Den.Sign() <= 0 {
-		return &EncodeError{Msg: "rational denominator must be positive"}
-	}
-	if r.Num.Sign() == 0 {
-		if r.Den.Cmp(bigOne) != 0 {
-			return &EncodeError{Msg: "canonical zero rational is [0, 1]"}
-		}
-	} else if new(big.Int).GCD(nil, nil, new(big.Int).Abs(r.Num), r.Den).Cmp(bigOne) != 0 {
-		return &EncodeError{Msg: "rational numerator and denominator must be coprime"}
+	if err := CheckRational(r.Num, r.Den); err != nil {
+		return err
 	}
 	return e.intPair(r.Num, r.Den, depth)
 }
